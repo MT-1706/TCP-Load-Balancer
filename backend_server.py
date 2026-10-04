@@ -8,13 +8,14 @@ import random
 HOST = '0.0.0.0'
 GATEWAY_HEARTBEAT_PORT = 5555
 GATEWAY_IP = '10.0.0.2' 
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 6001
 
 def send_heartbeat():
     """Periodically sends heartbeats to the load balancer with current load status."""
     while True:
         try:
             hb_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            hb_socket.connect((HOST, GATEWAY_HEARTBEAT_PORT))
+            hb_socket.connect((GATEWAY_IP, GATEWAY_HEARTBEAT_PORT))
             
             # Simulate a dynamic server load between 0% and 100%
             current_load = random.randint(10, 95) 
