@@ -6,6 +6,7 @@ import sys
 HOST = '0.0.0.0'
 CLIENT_PORT = 7000      
 HEARTBEAT_PORT = 5555
+SERVER_IPS = {6001: '10.0.0.3', 6002: '10.0.0.4'}
 
 # Set mode from terminal command line argument: 'adaptive' or 'static'
 BALANCE_MODE = sys.argv[1] if len(sys.argv) > 1 else 'adaptive'
@@ -28,6 +29,7 @@ def listen_for_heartbeats():
             data = conn.recv(1024).decode('utf-8')
             conn.close()
             if data.startswith("HEARTBEAT:"):
+                print(f"[HEARTBEAT RECEIVED] {data}", flush=True)
                 _, port_str, load_str = data.split(":")
                 with lock:
                     active_servers[int(port_str)] = {"load": int(load_str), "last_seen": time.time()}
@@ -85,7 +87,7 @@ def handle_client_routing(client_socket):
        
         backend_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         backend_socket.settimeout(2.5)
-        backend_socket.connect((HOST, best_port))
+        backend_socket.connect((SERVER_IPS[best_port], best_port))
         backend_socket.sendall(request)
        
         response = backend_socket.recv(1024)
