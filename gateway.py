@@ -21,6 +21,7 @@ total_routing_time = 0
 
 def listen_for_heartbeats():
     hb_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    hb_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     hb_server.bind((HOST, HEARTBEAT_PORT))
     hb_server.listen(10)
     while True:
@@ -108,6 +109,7 @@ def run_gateway():
     threading.Thread(target=monitor_server_health, daemon=True).start()
    
     gateway_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    gateway_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     gateway_server.bind((HOST, CLIENT_PORT))
     gateway_server.listen(50)
     print(f"[✓] SDN Control Plane running in **{BALANCE_MODE.upper()}** balancing mode on port {CLIENT_PORT}...")
