@@ -34,7 +34,7 @@ def handle_client(client_socket):
         if data.startswith("CALC:"):
             # Expecting data format: "CALC:num1,operator,num2" (e.g., "CALC:10,+,5")
             expression = data.split(":")[1]
-            print(f"[Server {PORT}] Processing math request: {expression}")
+            print(f"[Server {PORT}] Processing math request: {expression}", flush=True)
             
             # Simulate artificial processing delay to show load distribution
             time.sleep(random.uniform(0.2, 0.8))
@@ -47,7 +47,7 @@ def handle_client(client_socket):
             
         client_socket.sendall(response.encode('utf-8'))
     except Exception as e:
-        print(f"[Server {PORT}] Error: {e}")
+        print(f"[Server {PORT}] Error: {e}", flush=True)
     finally:
         client_socket.close()
 
@@ -58,7 +58,7 @@ def run_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((HOST, PORT))
     server.listen(5)
-    print(f"[✓] Back-end Calculation Server running on port {PORT}...")
+    print(f"[✓] Back-end Calculation Server running on port {PORT}...", flush=True)
     
     while True:
         client_sock, addr = server.accept()

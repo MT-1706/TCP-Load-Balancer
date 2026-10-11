@@ -2,3 +2,13 @@
 __pycache__/
 *.pyc
 *.log
+
+bin/
+include/
+lib/
+lib64/.sdn-venv/
+__pycache__/
+*.pyc
+*.log
+lib64/
+lib64
