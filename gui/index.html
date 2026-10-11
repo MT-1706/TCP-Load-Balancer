@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SDN Load Balancer Telemetry Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e293b; padding-bottom: 20px; }
+        h1 { margin: 0; color: #38bdf8; font-size: 2.5rem; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
+        .card { background-color: #1e293b; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border-left: 5px solid #64748b; }
+        .card.active-6001 { border-left-color: #38bdf8; }
+        .card.active-6002 { border-left-color: #fbbf24; }
+        .card.active-6003 { border-left-color: #34d399; }
+        .card.active-6004 { border-left-color: #a78bfa; }
+        .card.overloaded { border-left-color: #ef4444; background-color: #2d1616; }
+        .metrics { font-size: 2rem; font-weight: bold; margin-top: 10px; }
+        .chart-container { background-color: #1e293b; padding: 20px; border-radius: 10px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        
+        /* FIX: Explicitly enforce physical pixel dimensions so vectors don't compress */
+        canvas { 
+            background-color: #111827; 
+            border-radius: 6px; 
+            width: 100%; 
+            max-width: 1160px;
+            height: 260px; 
+            display: block; 
+            margin: 15px auto 0 auto; 
+        }
+        .legend { display: flex; justify-content: center; gap: 20px; margin-top: 15px; font-size: 0.9rem; }
+        .leg-item { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 12px; height: 12px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SDN Clusters Management Dashboard</h1>
+            <p>Live Node Telemetry & Computational Load Distribution Matrix</p>
+        </header>
+        <div class="grid">
+            <div id="card-6001" class="card active-6001"><h3>Worker Node #1</h3><p>Port: 6001 | 10.0.0.3</p><div id="load-6001" class="metrics">0%</div></div>
+            <div id="card-6002" class="card active-6002"><h3>Worker Node #2</h3><p>Port: 6002 | 10.0.0.4</p><div id="load-6002" class="metrics">0%</div></div>
+            <div id="card-6003" class="card active-6003"><h3>Worker Node #3</h3><p>Port: 6003 | 10.0.0.5</p><div id="load-6003" class="metrics">0%</div></div>
+            <div id="card-6004" class="card active-6004"><h3>Worker Node #4</h3><p>Port: 6004 | 10.0.0.6</p><div id="load-6004" class="metrics">0%</div></div>
+        </div>
+        <div class="chart-container">
+            <h3 style="margin: 0; color: #94a3b8;">Real-Time Cluster Load Tracking Matrix</h3>
+            <!-- Enforced scaling properties directly on the element canvas matrix context attributes -->
+            <canvas id="customCanvas" width="1160" height="260"></canvas>
+            <div class="legend">
+                <div class="leg-item"><div class="dot" style="background:#38bdf8"></div>Server 6001</div>
+                <div class="leg-item"><div class="dot" style="background:#fbbf24"></div>Server 6002</div>
+                <div class="leg-item"><div class="dot" style="background:#34d399"></div>Server 6003</div>
+                <div class="leg-item"><div class="dot" style="background:#a78bfa"></div>Server 6004</div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('customCanvas');
+        const ctx = canvas.getContext('2d');
+        const maxPoints = 20;
+        const history = { 6001: [], 6002: [], 6003: [], 6004: [] };
+        const colors = { 6001: '#38bdf8', 6002: '#fbbf24', 6003: '#34d399', 6004: '#a78bfa' };
+
+        function drawGraph() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#1f2937';
+            ctx.lineWidth = 1;
+            
+            // Draws background percentage gridlines
+            for(let i = 0; i <= 4; i++) {
+                let y = 30 + i * 50;
+                ctx.beginPath(); ctx.moveTo(50, y); ctx.lineTo(canvas.width - 20, y); ctx.stroke();
+                ctx.fillStyle = '#64748b'; ctx.font = '11px sans-serif';
+                ctx.fillText((100 - i * 25) + '%', 15, y + 4);
+            }
+            
+            // Plots live metric line data paths
+            for (let port in history) {
+                let data = history[port];
+                if (data.length < 2) continue;
+                ctx.strokeStyle = colors[port];
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < data.length; i++) {
+                    let x = 50 + (i * (canvas.width - 70) / (maxPoints - 1));
+                    let y = 230 - (data[i] * 200 / 100);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+        }
+
+        async function fetchLiveMetrics() {
+            try {
+                const response = await fetch('/api/metrics');
+                const data = await response.json();
+                const currentMetrics = {
+                    6001: data.server_6001 || 0,
+                    6002: data.server_6002 || 0,
+                    6003: data.server_6003 || 0,
+                    6004: data.server_6004 || 0
+                };
+                [6001, 6002, 6003, 6004].forEach(port => {
+                    const val = currentMetrics[port];
+                    document.getElementById('load-' + port).innerText = val + '%';
+                    const card = document.getElementById('card-' + port);
+                    
+                    // Triggers red warning color profile if server load peaks above 80%
+                    if (val > 80) card.classList.add('overloaded');
+                    else card.classList.remove('overloaded');
+                    
+                    history[port].push(val);
+                    if (history[port].length > maxPoints) history[port].shift();
+                });
+                drawGraph();
+            } catch (err) { console.log(err); }
+        }
+        drawGraph();
+        
+        // Polls the telemetry API metrics folder logs once every single second
+        setInterval(fetchLiveMetrics, 1000);
+    </script>
+</body>
+</html>
+
