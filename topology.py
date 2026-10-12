@@ -4,6 +4,7 @@ from mininet.node import RemoteController, OVSKernelSwitch
 from mininet.cli import CLI
 from mininet.log import setLogLevel, info
 import time
+import sys
 
 def build_sdn_socket_topology():
     net = Mininet(controller=RemoteController, switch=OVSKernelSwitch, build=False)
@@ -40,7 +41,8 @@ def build_sdn_socket_topology():
 
     info('*** Deploying Socket Application Components within Node Namespaces\n')
     # Change 'adaptive' to 'static' here when you want to switch load balancing algorithms
-    h2.cmd('python3 -u gateway.py adaptive > gateway_output.log 2>&1 &')
+    mode = sys.argv[1] if len(sys.argv) > 1 else "adaptive"
+    h2.cmd(f'python3 -u gateway.py {mode} > gateway_output.log 2>&1 &')
     time.sleep(1)
 
     h3.cmd('python3 -u backend_server.py 6001 > worker_6001_output.log 2>&1 &')

@@ -15,6 +15,7 @@ SERVER_IPS = {
 
 BALANCE_MODE = sys.argv[1] if len(sys.argv) > 1 else 'adaptive'
 active_servers = {}
+in_flight_requests = {}
 lock = threading.Lock()
 round_robin_counter = 0
 
@@ -48,44 +49,107 @@ def monitor_server_health():
 
 def select_backend_server():
     global round_robin_counter
+
     with lock:
         server_ports = list(active_servers.keys())
+
         if not server_ports:
             return None, "No online back-end servers available"
-       
+
         if BALANCE_MODE == 'static':
             port = server_ports[round_robin_counter % len(server_ports)]
             round_robin_counter += 1
-            return port, f"Static Flow Assignment (Round-Robin)"
+            in_flight_requests[port] = in_flight_requests.get(port, 0) + 1
+            return port, "Static Flow Assignment (Round-Robin)"
+
+        underloaded = {
+            p: info for p, info in active_servers.items()
+            if info["load"] <= 80
+        }
+
+        candidates = underloaded if underloaded else active_servers
+
+        best_port = min(
+            candidates,
+            key=lambda p: (
+                candidates[p]["load"] + 10 * in_flight_requests.get(p, 0),
+                in_flight_requests.get(p, 0)
+            )
+        )
+
+        in_flight_requests[best_port] = (
+            in_flight_requests.get(best_port, 0) + 1
+        )
+
+        if underloaded:
+            reason = (
+                f"Adaptive Routing (Reported Load: "
+                f"{active_servers[best_port]['load']}%, "
+                f"In-Flight: {in_flight_requests[best_port] - 1})"
+            )
         else:
-            underloaded = {p: info for p, info in active_servers.items() if info["load"] <= 80}
-            if underloaded:
-                best_port = min(underloaded, key=lambda k: underloaded[k]["load"])
-                return best_port, f"Adaptive SDN Routing (Least-Load: {underloaded[best_port]['load']}% Utilization)"
-            else:
-                best_port = min(active_servers, key=lambda k: active_servers[k]["load"])
-                return best_port, f"Adaptive Emergency Flow (Load: {active_servers[best_port]['load']}%)"
+            reason = (
+                f"Adaptive Emergency Flow (Load: "
+                f"{active_servers[best_port]['load']}%, "
+                f"In-Flight: {in_flight_requests[best_port] - 1})"
+            )
+
+        return best_port, reason
 
 def handle_client_routing(client_socket):
+    best_port = None
+    backend_socket = None
+
     try:
         request = client_socket.recv(1024)
-        best_port, routing_log = select_backend_server()
-        if best_port is None:
-            client_socket.sendall(f"ERROR:{routing_log}".encode('utf-8'))
+
+        if not request:
             return
 
-        print(f"[{BALANCE_MODE.upper()} Flow Decision] {routing_log} -> Route to {best_port}", flush=True)
-       
-        backend_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        best_port, routing_log = select_backend_server()
+
+        if best_port is None:
+            client_socket.sendall(
+                f"ERROR:{routing_log}".encode("utf-8")
+            )
+            return
+
+        print(
+            f"[{BALANCE_MODE.upper()} Flow Decision] "
+            f"{routing_log} -> Route to {best_port}",
+            flush=True
+        )
+
+        backend_socket = socket.socket(
+            socket.AF_INET, socket.SOCK_STREAM
+        )
         backend_socket.settimeout(2.5)
-        backend_socket.connect((SERVER_IPS[best_port], best_port))
+        backend_socket.connect(
+            (SERVER_IPS[best_port], best_port)
+        )
         backend_socket.sendall(request)
+
         response = backend_socket.recv(1024)
-        backend_socket.close()
         client_socket.sendall(response)
+
     except Exception as e:
-        client_socket.sendall(f"ERROR:SDN Flow Interrupted ({e})".encode('utf-8'))
+        try:
+            client_socket.sendall(
+                f"ERROR:SDN Flow Interrupted ({e})".encode("utf-8")
+            )
+        except OSError:
+            pass
+
     finally:
+        if backend_socket is not None:
+            backend_socket.close()
+
+        if best_port is not None:
+            with lock:
+                in_flight_requests[best_port] = max(
+                    0, in_flight_requests.get(best_port, 1) - 1
+                )
+
         client_socket.close()
 
 def run_gateway():
