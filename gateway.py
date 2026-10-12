@@ -35,14 +35,15 @@ def listen_for_heartbeats():
                     active_servers[int(port_str)] = {"load": int(load_str), "last_seen": time.time()}
                     # Ensure logs write dynamically into our tracking file
                     print(f"[HEARTBEAT RECEIVED] HEARTBEAT:{port_str}:{load_str}", flush=True)
-        except Exception: pass
+        except Exception as e:
+            print(f"[Gateway] Heartbeat listener error: {e}", flush=True) 
 
 def monitor_server_health():
     while True:
         time.sleep(1)
         now = time.time()
         with lock:
-            to_remove = [p for p, info in active_servers.items() if now - info["last_seen"] > 4.0]
+            to_remove = [p for p, info in active_servers.items() if now - info["last_seen"] > 8.0]
             for port in to_remove:
                 print(f"[⚠️ SDN Controller Failure Alert] Node {port} dropped heartbeats.", flush=True)
                 del active_servers[port]

@@ -24,9 +24,12 @@ def send_heartbeat():
             hb_socket.sendall(heartbeat_msg.encode('utf-8'))
             hb_socket.close()
         except Exception:
-            pass # Load balancer might be temporarily down
-        time.sleep(2) # Send heartbeat every 2 seconds
+            print(f"[Server {PORT}] Heartbeat failed: {e}", flush=True)
+        finally:
+            if 'hb_socket' in locals():
+                hb_socket.close()
 
+        time.sleep(2)
 def handle_client(client_socket):
     """Processes computational math requests from connected clients."""
     try:
