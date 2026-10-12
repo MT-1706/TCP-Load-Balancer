@@ -4,6 +4,7 @@ from os_ken.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER, set_ev
 from os_ken.ofproto import ofproto_v1_3
 from os_ken.lib.packet import packet, ethernet
 from os_ken.lib import hub
+import time
 
 class SimpleSDNController(app_manager.OSKenApp):
 
@@ -12,9 +13,10 @@ class SimpleSDNController(app_manager.OSKenApp):
     def __init__(self, *args, **kwargs):
         super(SimpleSDNController, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
-        self.monitor_thread = hub.spawn(self._monitor)
         self.datapaths = {}
-
+        self.port_stats_previous = {}
+        self.port_rates = {}
+        self.monitor_thread = hub.spawn(self._monitor)
     def _monitor(self):
         while True:
             for datapath in self.datapaths.values():
@@ -138,14 +140,43 @@ class SimpleSDNController(app_manager.OSKenApp):
     def port_stats_reply_handler(self, ev):
         datapath = ev.msg.datapath
         dpid = datapath.id
+        now = time.time()
 
         for stat in ev.msg.body:
-            self.logger.info(
-                "NETWORK LOAD | Switch=%s Port=%s | RX packets=%s RX bytes=%s | TX packets=%s TX bytes=%s",
-                dpid,
-                stat.port_no,
-                stat.rx_packets,
-                stat.rx_bytes,
-                stat.tx_packets,
-                stat.tx_bytes
-            )
+            port_no = stat.port_no
+            key = (dpid, port_no)
+
+            current = {
+                "rx_bytes": stat.rx_bytes,
+                "tx_bytes": stat.tx_bytes,
+                "time": now
+            }
+
+            previous = self.port_stats_previous.get(key)
+
+            if previous is not None:
+                elapsed = now - previous["time"]
+
+                if elapsed > 0:
+                    rx_rate = max(
+                        0, current["rx_bytes"] - previous["rx_bytes"]
+                    ) * 8 / elapsed
+
+                    tx_rate = max(
+                        0, current["tx_bytes"] - previous["tx_bytes"]
+                    ) * 8 / elapsed
+
+                    self.port_rates[key] = {
+                        "rx_bps": rx_rate,
+                        "tx_bps": tx_rate
+                    }
+
+                    self.logger.info(
+                        "NETWORK RATE | Switch=%s Port=%s | RX=%.2f Mbps TX=%.2f Mbps",
+                        dpid,
+                        port_no,
+                        rx_rate / 1_000_000,
+                        tx_rate / 1_000_000
+                    )
+
+            self.port_stats_previous[key] = current
