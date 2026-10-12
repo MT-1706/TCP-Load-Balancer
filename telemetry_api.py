@@ -1,3 +1,4 @@
+
 import http.server
 import json
 import os
@@ -6,31 +7,38 @@ import re
 PORT = 8080
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GATEWAY_LOG_PATH = os.path.join(BASE_DIR, "gateway_output.log")
+BACKEND_PORTS = (6001, 6002, 6003, 6004)
 
 
 def get_live_cluster_metrics():
-    metrics = {
-        "server_6001": 0,
-        "server_6002": 0,
-    }
+    metrics = {f"server_{port}": 0 for port in BACKEND_PORTS}
+    found = set()
 
     if not os.path.exists(GATEWAY_LOG_PATH):
         return metrics
 
     try:
-        with open(GATEWAY_LOG_PATH, "r", encoding="utf-8", errors="replace") as log_file:
+        with open(
+            GATEWAY_LOG_PATH, "r", encoding="utf-8", errors="replace"
+        ) as log_file:
             lines = log_file.readlines()
 
-        # Find the latest heartbeat for each backend.
+        # Read backwards so the first matching heartbeat is the latest.
         for line in reversed(lines):
             match = re.search(r"HEARTBEAT:(\d+):(\d+)", line)
-            if match:
-                port = match.group(1)
-                load = int(match.group(2))
-                key = f"server_{port}"
+            if not match:
+                continue
 
-                if key in metrics and metrics[key] == 0:
-                    metrics[key] = load
+            port = int(match.group(1))
+            load = int(match.group(2))
+            key = f"server_{port}"
+
+            if port in BACKEND_PORTS and port not in found:
+                metrics[key] = load
+                found.add(port)
+
+            if len(found) == len(BACKEND_PORTS):
+                break
 
     except OSError as error:
         print(f"Could not read gateway log: {error}")
